@@ -54,6 +54,16 @@ class SnowflakeConfig(BaseModel):
             raise ValueError("agent_services must be empty (cortex_agent disabled in v1)")
         return self
 
+    @model_validator(mode="after")
+    def require_auth_method(self) -> "SnowflakeConfig":
+        if not (self.password or self.private_key or self.authenticator):
+            raise ValueError(
+                "snowflake auth required: set one of password, private_key, "
+                "or authenticator (via YAML or SNOWFLAKE_PASSWORD / "
+                "SNOWFLAKE_PRIVATE_KEY / SNOWFLAKE_AUTHENTICATOR env)"
+            )
+        return self
+
 
 class RestartPolicy(BaseModel):
     max_attempts: int = Field(ge=1)

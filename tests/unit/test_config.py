@@ -166,3 +166,43 @@ def test_yaml_user_satisfies_requirement_without_env(tmp_path, monkeypatch):
 
     cfg = load_config(path)
     assert cfg.snowflake.user == "yaml-user"
+
+
+def test_missing_all_auth_methods_raises(tmp_path, monkeypatch):
+    """At least one of password, private_key, or authenticator must be set."""
+    monkeypatch.setenv("SNOWFLAKE_USER", "agent")
+    monkeypatch.delenv("SNOWFLAKE_PASSWORD", raising=False)
+    monkeypatch.delenv("SNOWFLAKE_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("SNOWFLAKE_AUTHENTICATOR", raising=False)
+    path = write_yaml(
+        tmp_path,
+        {
+            "snowflake": {
+                "account": "abc-xyz",
+                "search_services": [],
+                "analyst_services": [],
+                "agent_services": [],
+                "other_services": {
+                    "query_manager": False,
+                    "object_manager": False,
+                    "semantic_manager": False,
+                },
+            },
+            "greybeam": {
+                "proxy_host": "greybeam.example.com",
+                "row_cap": 10000,
+                "byte_cap": 10_000_000,
+                "query_timeout": 300,
+                "child_restart_policy": {
+                    "max_attempts": 3,
+                    "backoff_seconds": [1, 4, 16],
+                    "jitter": True,
+                },
+                "cortex_search_required": True,
+                "log_sql": False,
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="snowflake auth required"):
+        load_config(path)
