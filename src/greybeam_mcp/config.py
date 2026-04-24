@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
 
 class CortexSearchService(BaseModel):
@@ -38,8 +38,8 @@ class OtherServices(BaseModel):
 class SnowflakeConfig(BaseModel):
     account: str
     user: str
-    password: str | None = None
-    private_key: str | None = None
+    password: SecretStr | None = None
+    private_key: SecretStr | None = None
     authenticator: str | None = None
     search_services: list[CortexSearchService] = Field(default_factory=list)
     analyst_services: list[Any] = Field(default_factory=list)
@@ -84,11 +84,18 @@ class Config(BaseModel):
 
 
 def _inject_env(snowflake_data: dict[str, Any]) -> dict[str, Any]:
-    """Snowflake credentials live in env vars; merge them into the dict."""
-    user = os.environ.get("SNOWFLAKE_USER")
-    if not user:
-        raise ValueError("SNOWFLAKE_USER environment variable is required")
-    snowflake_data.setdefault("user", user)
+    """Snowflake credentials live in env vars; merge them into the dict.
+
+    Env vars take lower precedence than YAML (setdefault), so an operator can
+    override the env by setting the field explicitly in YAML.
+    """
+    if user := os.environ.get("SNOWFLAKE_USER"):
+        snowflake_data.setdefault("user", user)
+    if not snowflake_data.get("user"):
+        raise ValueError(
+            "SNOWFLAKE_USER environment variable is required "
+            "(or set snowflake.user in YAML)"
+        )
 
     if pw := os.environ.get("SNOWFLAKE_PASSWORD"):
         snowflake_data.setdefault("password", pw)
