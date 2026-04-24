@@ -1,0 +1,25 @@
+snowflake:
+  account: abc-xyz123
+  search_services:
+    - service_name: docs_search
+      description: "Product documentation search"
+      database_name: DOCS
+      schema_name: PUBLIC
+  analyst_services: []
+  agent_services: []
+  other_services:
+    query_manager: false
+    object_manager: false
+    semantic_manager: false
+
+greybeam:
+  proxy_host: greybeam.example.com
+  row_cap: 10000
+  byte_cap: 10000000
+  query_timeout: 300
+  child_restart_policy:
+    max_attempts: 3
+    backoff_seconds: [1, 4, 16]
+    jitter: true
+  cortex_search_required: true
+  log_sql: false
