@@ -152,6 +152,66 @@ async def test_start_unwinds_stack_when_initialize_raises() -> None:
 
 
 @pytest.mark.asyncio
+async def test_start_unwinds_when_stdio_enter_raises() -> None:
+    stdio_cm = MagicMock()
+    stdio_cm.__aenter__ = AsyncMock(side_effect=RuntimeError("spawn failed"))
+    stdio_cm.__aexit__ = AsyncMock(return_value=None)
+
+    with patch(
+        "greybeam_mcp.child.client.stdio_client", return_value=stdio_cm
+    ):
+        client = ChildMcpClient(command="echo", args=[])
+        with pytest.raises(RuntimeError, match="spawn failed"):
+            await client.start()
+        assert client.is_alive() is False
+
+
+@pytest.mark.asyncio
+async def test_start_unwinds_when_session_enter_raises() -> None:
+    stdio_cm = _make_stdio_cm()
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(side_effect=RuntimeError("session enter failed"))
+    session_cm.__aexit__ = AsyncMock(return_value=None)
+
+    with patch(
+        "greybeam_mcp.child.client.stdio_client", return_value=stdio_cm
+    ), patch(
+        "greybeam_mcp.child.client.ClientSession", return_value=session_cm
+    ):
+        client = ChildMcpClient(command="echo", args=[])
+        with pytest.raises(RuntimeError, match="session enter failed"):
+            await client.start()
+        # stdio entered successfully and so must be aexit'd; session never
+        # entered so its aexit must NOT have been awaited.
+        stdio_cm.__aexit__.assert_awaited()
+        session_cm.__aexit__.assert_not_awaited()
+        assert client.is_alive() is False
+
+
+@pytest.mark.asyncio
+async def test_stop_swallows_aclose_exception(caplog: pytest.LogCaptureFixture) -> None:
+    session = MagicMock()
+    session.initialize = AsyncMock()
+    stdio_cm = _make_stdio_cm()
+    session_cm = _make_session_cm(session)
+    # Force aclose to fail by making the stdio __aexit__ raise after start succeeds.
+    stdio_cm.__aexit__ = AsyncMock(side_effect=RuntimeError("aclose boom"))
+
+    with patch(
+        "greybeam_mcp.child.client.stdio_client", return_value=stdio_cm
+    ), patch(
+        "greybeam_mcp.child.client.ClientSession", return_value=session_cm
+    ):
+        client = ChildMcpClient(command="echo", args=[])
+        await client.start()
+        with caplog.at_level("WARNING", logger="greybeam_mcp.child.client"):
+            await client.stop()  # must NOT raise
+
+    assert client.is_alive() is False
+    assert any("aclose" in rec.message for rec in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_methods_raise_runtime_error_before_start() -> None:
     client = ChildMcpClient(command="echo", args=[])
     with pytest.raises(RuntimeError, match="start"):

@@ -11,12 +11,15 @@ before forwarding to the session — that's what ``BaseSession`` expects.
 """
 from __future__ import annotations
 
+import logging
 from contextlib import AsyncExitStack
 from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import ClientNotification
+
+log = logging.getLogger(__name__)
 
 
 class ChildMcpClient:
@@ -80,8 +83,20 @@ class ChildMcpClient:
         return self._session is not None
 
     async def stop(self) -> None:
+        """Tear down the child. Idempotent and never raises.
+
+        Resets state before awaiting aclose so a partially-failed teardown
+        can't be observed mid-flight, and swallows any aclose exception
+        (logged) since the resources are being abandoned regardless. The
+        bounded-restart loop relies on this: stop() is called on every
+        recovery attempt and must not be able to re-raise into it.
+        """
         stack = self._exit_stack
         self._exit_stack = None
         self._session = None
-        if stack is not None:
+        if stack is None:
+            return
+        try:
             await stack.aclose()
+        except BaseException:  # noqa: BLE001 — teardown must never raise
+            log.warning("ChildMcpClient stop() suppressed exception during aclose", exc_info=True)
