@@ -24,6 +24,7 @@ dev = [
     "pytest-cov>=4.1",
     "ruff>=0.4",
     "mypy>=1.10",
+    "respx>=0.21.0",
 ]
 
 [build-system]
