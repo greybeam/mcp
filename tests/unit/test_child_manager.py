@@ -265,6 +265,111 @@ async def test_state_callback_exception_does_not_break_recovery() -> None:
 
 
 @pytest.mark.asyncio
+async def test_concurrent_failing_call_tools_fire_state_callback_once() -> None:
+    """Two concurrent call_tool failures must NOT double-fire state transitions
+    or schedule parallel recovery tasks. Pins the guard contract that
+    relies on `self._client = None` running synchronously before any await
+    in the except branch — a regression in that ordering would let both
+    callers slip through and double-fire the tools/list_changed signal.
+    """
+    calls = {"count": 0}
+
+    def factory() -> AsyncMock:
+        calls["count"] += 1
+        c = AsyncMock()
+        c.list_tools = AsyncMock(return_value=[{"name": "cortex_search"}])
+        c.start = AsyncMock()
+        c.stop = AsyncMock()
+        if calls["count"] == 1:
+            # Slow failure so both concurrent callers are awaiting the same
+            # call_tool when the exception lands.
+            async def slow_fail(*_args: object, **_kwargs: object) -> None:
+                await asyncio.sleep(0.02)
+                raise ConnectionError("pipe closed")
+
+            c.call_tool = AsyncMock(side_effect=slow_fail)
+        else:
+            c.call_tool = AsyncMock(return_value={"isError": False, "content": []})
+        return c
+
+    states: list[ChildState] = []
+
+    async def on_state(s: ChildState) -> None:
+        states.append(s)
+
+    mgr = ChildManager(
+        client_factory=factory,
+        restart_policy=_policy(),
+        cortex_search_required=True,
+        on_state_change=on_state,
+    )
+    await mgr.start()
+    assert mgr.state == ChildState.RUNNING
+
+    # Fire two concurrent call_tools; both should raise, only one should
+    # transition the state machine.
+    results = await asyncio.gather(
+        mgr.call_tool("cortex_search", {"query": "a"}),
+        mgr.call_tool("cortex_search", {"query": "b"}),
+        return_exceptions=True,
+    )
+    assert all(isinstance(r, ConnectionError) for r in results)
+
+    # Wait for recovery to complete.
+    for _ in range(50):
+        if mgr.state == ChildState.RUNNING and calls["count"] >= 2:
+            break
+        await asyncio.sleep(0.01)
+
+    # STOPPED must appear exactly once across the lifecycle (one teardown,
+    # not two), even though two callers failed at the same time.
+    assert states.count(ChildState.STOPPED) == 1
+    # Final sequence: RUNNING (start) -> STOPPED (teardown) -> RUNNING (recover).
+    assert states == [ChildState.RUNNING, ChildState.STOPPED, ChildState.RUNNING]
+    assert calls["count"] == 2  # one initial + one recovery
+
+
+@pytest.mark.asyncio
+async def test_start_cancellation_stops_started_client() -> None:
+    """If start() is cancelled while inside list_tools, the already-started
+    client must still be torn down — pins the BaseException leg of
+    _try_start_once's cleanup that the inline comment calls out.
+    """
+    started_clients: list[AsyncMock] = []
+    list_tools_entered = asyncio.Event()
+
+    def factory() -> AsyncMock:
+        c = AsyncMock()
+        c.start = AsyncMock()
+        c.stop = AsyncMock()
+
+        async def slow_list_tools() -> list[dict[str, str]]:
+            list_tools_entered.set()
+            await asyncio.sleep(5)  # long enough that the test cancels first
+            return [{"name": "cortex_search"}]
+
+        c.list_tools = AsyncMock(side_effect=slow_list_tools)
+        started_clients.append(c)
+        return c
+
+    mgr = ChildManager(
+        client_factory=factory,
+        restart_policy=_policy(),
+        cortex_search_required=True,
+    )
+
+    task = asyncio.create_task(mgr.start())
+    await list_tools_entered.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # The started client must have had stop() awaited despite the cancel.
+    assert len(started_clients) == 1
+    started_clients[0].stop.assert_awaited()
+
+
+@pytest.mark.asyncio
 async def test_stop_cancels_in_flight_recovery() -> None:
     """stop() while recovery is mid-backoff must cancel the recovery task and finish cleanly."""
     calls = {"count": 0}
