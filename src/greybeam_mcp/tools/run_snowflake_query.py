@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel, field_validator
+from snowflake.connector import DictCursor
 
 from greybeam_mcp.cancel import CancelToken
 from greybeam_mcp.config import GreybeamConfig, SnowflakeConfig
@@ -98,7 +99,7 @@ def _execute_sync(
     or `cursor.fetchmany` by calling `token.set()`. The next batch boundary
     then sees the flag and exits cleanly with `Cancelled`.
     """
-    with conn.cursor(_dict_cursor=True) as cursor:
+    with conn.cursor(DictCursor) as cursor:
         cancel_token.register_cancel(cursor.cancel)
         cursor.execute(statement, timeout=timeout)
         results: list[dict[str, Any]] = []

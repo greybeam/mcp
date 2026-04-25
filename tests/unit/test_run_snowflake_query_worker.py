@@ -1,7 +1,7 @@
-import sys
 from unittest.mock import MagicMock
 
 import pytest
+from snowflake.connector import DictCursor
 
 from greybeam_mcp.cancel import CancelToken
 from greybeam_mcp.tools.run_snowflake_query import (
@@ -33,6 +33,7 @@ def test_returns_full_results_under_cap():
     )
     assert rows == [{"a": 1}, {"a": 2}]
     cursor.execute.assert_called_once_with("SELECT 1", timeout=30)
+    conn.cursor.assert_called_once_with(DictCursor)
 
 
 def test_row_cap_exceeded_raises():
