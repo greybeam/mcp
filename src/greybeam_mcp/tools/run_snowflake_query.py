@@ -76,7 +76,7 @@ class ToolResult:
 
 def _est_bytes(rows: list[dict[str, Any]]) -> int:
     """Cheap upper-bound estimate of serialized JSON size."""
-    return sum(len(json.dumps(r, default=str)) for r in rows)
+    return sum(len(json.dumps(r, default=str).encode("utf-8")) for r in rows)
 
 
 def _execute_sync(
