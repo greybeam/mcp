@@ -82,20 +82,27 @@ async def test_sql_block_executed_and_results_returned(configs):
         }
     })
 
+    rsq_mock = AsyncMock(return_value=ToolResult(is_error=False, rows=[{"a": 1}]))
+    sentinel_token = object()  # we want to verify it's forwarded by identity
     with patch(
         "greybeam_mcp.tools.cortex_analyst.CortexAnalystClient",
         return_value=fake_client,
     ), patch(
         "greybeam_mcp.tools.cortex_analyst.run_snowflake_query",
-        AsyncMock(return_value=ToolResult(is_error=False, rows=[{"a": 1}])),
+        rsq_mock,
     ):
         payload = await cortex_analyst(
-            arguments={"messages": []}, sf=sf, gb=gb, cancel_token=None
+            arguments={"messages": []}, sf=sf, gb=gb, cancel_token=sentinel_token,
         )
 
     assert payload.is_error is False
     assert payload.json_payload["sql"] == "SELECT 1"
     assert payload.json_payload["results"] == [{"a": 1}]
+    # Pin the cancel_token forwarding contract — a regression that drops
+    # the kwarg would silently disable cap-driven cancellation downstream.
+    rsq_mock.assert_awaited_once()
+    assert rsq_mock.call_args.kwargs["cancel_token"] is sentinel_token
+    assert rsq_mock.call_args.kwargs["statement"] == "SELECT 1"
 
 
 @pytest.mark.asyncio
@@ -184,3 +191,26 @@ async def test_password_secretstr_is_unwrapped_for_client(configs):
     assert kwargs["password"] == "pw"  # plain string, NOT SecretStr('**********')
     assert kwargs["account"] == "abc"
     assert kwargs["user"] == "agent"
+
+
+@pytest.mark.asyncio
+async def test_cancelled_error_propagates_through_orchestrator(configs):
+    """The `except Exception` around send_message must NOT swallow
+    asyncio.CancelledError. Cancellation has to bubble up so cooperative
+    shutdown / outer cancel scopes work — wrapping it as
+    cortex_analyst_api would silently break that contract.
+    """
+    import asyncio
+
+    sf, gb = configs
+    fake_client = AsyncMock()
+    fake_client.send_message = AsyncMock(side_effect=asyncio.CancelledError())
+
+    with patch(
+        "greybeam_mcp.tools.cortex_analyst.CortexAnalystClient",
+        return_value=fake_client,
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await cortex_analyst(
+                arguments={"messages": []}, sf=sf, gb=gb, cancel_token=None
+            )

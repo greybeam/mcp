@@ -80,7 +80,7 @@ async def cortex_analyst(
         )
 
     parsed = parse_analyst_response(raw)
-    payload = AnalystPayload(text=parsed.text, sql=parsed.sql)
+    results: list[dict[str, Any]] | None = None
 
     if parsed.sql:
         sql_result: ToolResult = await run_snowflake_query(
@@ -96,8 +96,11 @@ async def cortex_analyst(
                     f"{sql_result.error_message}"
                 ),
             )
-        payload.results = sql_result.rows
+        results = sql_result.rows
 
+    # Build the payload once with all fields rather than constructing then
+    # mutating — preserves the immutability convention from CLAUDE.md.
+    payload = AnalystPayload(text=parsed.text, sql=parsed.sql, results=results)
     return CortexAnalystResult(
         is_error=False,
         json_payload=payload.model_dump(exclude_none=True),
