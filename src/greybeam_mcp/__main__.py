@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -43,8 +44,12 @@ def main() -> None:
     setup_logging(level=args.log_level)
     cfg = load_config(args.config)
 
+    # The child config contains Snowflake credentials. Write with 0o600
+    # perms and unlink unconditionally on shutdown so credential-bearing
+    # files don't accumulate across invocations.
     with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as f:
         child_config_path = Path(f.name)
+    os.chmod(child_config_path, 0o600)
     write_child_config(cfg.snowflake, child_config_path)
 
     upstream_args_base = args.upstream_arg or ["-m", "mcp_server_snowflake"]
@@ -53,7 +58,10 @@ def main() -> None:
         "--service-config-file",
         str(child_config_path),
     ]
-    asyncio.run(run_server(cfg, args.upstream_command, upstream_args))
+    try:
+        asyncio.run(run_server(cfg, args.upstream_command, upstream_args))
+    finally:
+        child_config_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

@@ -239,6 +239,10 @@ async def run_server(cfg: Config, child_command: str, child_args: list[str]) -> 
             )
             raise _unknown_tool_error(name) from e
         except Exception as e:
+            # error_code is reserved for the JSON-RPC code surface (see
+            # the UnknownToolError branch's "-32602"). Don't conflate it
+            # with the exception message; log.exception already captures
+            # the full traceback.
             log.exception(
                 "tool_call_crash",
                 extra=tool_call_log(
@@ -249,7 +253,6 @@ async def run_server(cfg: Config, child_command: str, child_args: list[str]) -> 
                     outcome="crash",
                     cancelled=False,
                     error_kind=type(e).__name__,
-                    error_code=str(e)[:100],
                 ),
             )
             raise

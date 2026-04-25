@@ -161,6 +161,11 @@ async def test_cancel_owned_call_sets_token():
             await asyncio.sleep(0)
             if "token" in captured:
                 break
+        # Pin identity: the token forwarded to run_snowflake_query MUST be the
+        # one registered in _in_flight, otherwise dispatcher.cancel(request_id)
+        # would set a different token than the one the worker observes.
+        registered = d._in_flight["r1"].token
+        assert registered is captured["token"]
         d.cancel("r1")
         await task
 
@@ -185,6 +190,10 @@ async def test_cancel_delegated_call_forwards_notification_to_child():
         await asyncio.sleep(0)
     d.cancel("r1")
     await task
+    # cancel() schedules the child notification as a fire-and-forget task;
+    # drain it explicitly so the assertion isn't racing the scheduler.
+    if d._fire_and_forget:
+        await asyncio.gather(*list(d._fire_and_forget))
     child.send_notification.assert_awaited_with(
         "notifications/cancelled", {"requestId": "r1"}
     )
