@@ -39,7 +39,11 @@ class CancelToken:
             try:
                 cb()
             except Exception as e:
-                log.warning("cancel_callback_failed", extra={"error": str(e)})
+                log.warning(
+                    "cancel_callback_failed",
+                    extra={"error": str(e)},
+                    exc_info=True,
+                )
 
     def is_set(self) -> bool:
         return self._event.is_set()
@@ -60,4 +64,8 @@ class CancelToken:
             try:
                 cb()
             except Exception as e:
-                log.warning("cancel_callback_failed", extra={"error": str(e)})
+                log.warning(
+                    "cancel_callback_failed",
+                    extra={"error": str(e)},
+                    exc_info=True,
+                )
