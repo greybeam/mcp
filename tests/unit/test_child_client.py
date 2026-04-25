@@ -212,6 +212,29 @@ async def test_stop_swallows_aclose_exception(caplog: pytest.LogCaptureFixture) 
 
 
 @pytest.mark.asyncio
+async def test_stop_propagates_cancelled_error() -> None:
+    import asyncio
+
+    session = MagicMock()
+    session.initialize = AsyncMock()
+    stdio_cm = _make_stdio_cm()
+    session_cm = _make_session_cm(session)
+    stdio_cm.__aexit__ = AsyncMock(side_effect=asyncio.CancelledError())
+
+    with patch(
+        "greybeam_mcp.child.client.stdio_client", return_value=stdio_cm
+    ), patch(
+        "greybeam_mcp.child.client.ClientSession", return_value=session_cm
+    ):
+        client = ChildMcpClient(command="echo", args=[])
+        await client.start()
+        with pytest.raises(asyncio.CancelledError):
+            await client.stop()
+
+    assert client.is_alive() is False
+
+
+@pytest.mark.asyncio
 async def test_methods_raise_runtime_error_before_start() -> None:
     client = ChildMcpClient(command="echo", args=[])
     with pytest.raises(RuntimeError, match="start"):

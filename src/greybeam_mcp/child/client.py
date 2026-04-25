@@ -98,5 +98,9 @@ class ChildMcpClient:
             return
         try:
             await stack.aclose()
-        except BaseException:  # noqa: BLE001 — teardown must never raise
+        except Exception:
+            # Teardown must not re-raise into the bounded-restart loop, but
+            # we deliberately do NOT catch BaseException — asyncio.CancelledError
+            # (and KeyboardInterrupt/SystemExit) must propagate so cooperative
+            # cancellation continues to work during shutdown.
             log.warning("ChildMcpClient stop() suppressed exception during aclose", exc_info=True)
