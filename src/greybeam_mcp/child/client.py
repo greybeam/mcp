@@ -37,20 +37,27 @@ class ChildMcpClient:
             command=self._command, args=self._args, env=self._env
         )
         stack = AsyncExitStack()
-        read, write = await stack.enter_async_context(stdio_client(params))
-        session = await stack.enter_async_context(ClientSession(read, write))
-        await session.initialize()
+        try:
+            read, write = await stack.enter_async_context(stdio_client(params))
+            session = await stack.enter_async_context(ClientSession(read, write))
+            await session.initialize()
+        except BaseException:
+            await stack.aclose()
+            raise
         self._exit_stack = stack
         self._session = session
 
+    def _require_session(self) -> ClientSession:
+        if self._session is None:
+            raise RuntimeError("ChildMcpClient.start() must be awaited first")
+        return self._session
+
     async def list_tools(self) -> list[dict[str, Any]]:
-        assert self._session is not None, "ChildMcpClient.start() must be awaited first"
-        result = await self._session.list_tools()
+        result = await self._require_session().list_tools()
         return [t.model_dump() for t in result.tools]
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        assert self._session is not None, "ChildMcpClient.start() must be awaited first"
-        result = await self._session.call_tool(name, arguments=arguments)
+        result = await self._require_session().call_tool(name, arguments=arguments)
         return result.model_dump()
 
     async def send_notification(self, method: str, params: dict[str, Any]) -> None:
@@ -63,17 +70,18 @@ class ChildMcpClient:
         rather than constructing a specific typed notification — that keeps
         this wrapper agnostic to which notification the dispatcher sends.
         """
-        assert self._session is not None, "ChildMcpClient.start() must be awaited first"
+        session = self._require_session()
         notification = ClientNotification.model_validate(
             {"method": method, "params": params}
         )
-        await self._session.send_notification(notification)
+        await session.send_notification(notification)
 
     def is_alive(self) -> bool:
         return self._session is not None
 
     async def stop(self) -> None:
-        if self._exit_stack is not None:
-            await self._exit_stack.aclose()
+        stack = self._exit_stack
         self._exit_stack = None
         self._session = None
+        if stack is not None:
+            await stack.aclose()
