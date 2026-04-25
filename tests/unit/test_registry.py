@@ -46,3 +46,19 @@ def test_merge_filters_unexpected_delegated_tools():
     names = [t["name"] for t in merged]
     assert "rogue_tool" not in names
     assert "cortex_search" in names
+
+
+def test_merge_keeps_owned_before_delegated_even_when_alphabetically_after():
+    """Owned tools always precede delegated, regardless of alphabetical order."""
+    owned = [{"name": "zz_owned"}]
+    delegated = [{"name": "cortex_search"}]
+    merged = merge_tool_lists(owned, delegated)
+    assert [t["name"] for t in merged] == ["zz_owned", "cortex_search"]
+
+
+def test_merge_raises_on_duplicate_names():
+    """A malformed input list with intra-side dups must fail fast."""
+    owned = [{"name": "cortex_analyst"}, {"name": "cortex_analyst"}]
+    delegated = [{"name": "cortex_search"}]
+    with pytest.raises(ValueError, match="duplicate tool name"):
+        merge_tool_lists(owned, delegated)

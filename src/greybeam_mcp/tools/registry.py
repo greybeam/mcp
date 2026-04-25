@@ -25,8 +25,17 @@ def merge_tool_lists(
     """Per spec §5.2: owned tools alphabetical first, then delegated alphabetical.
 
     Delegated tools not in DELEGATED_TOOLS are filtered out (fail-closed).
+    Raises ValueError on duplicate names across the merged list — MCP
+    `tools/list` requires unique names; a collision would be a bug worth
+    failing fast on.
     """
     owned_sorted = sorted(owned, key=lambda t: t["name"])
     delegated_filtered = [t for t in delegated if t["name"] in DELEGATED_TOOLS]
     delegated_sorted = sorted(delegated_filtered, key=lambda t: t["name"])
-    return [*owned_sorted, *delegated_sorted]
+    merged = [*owned_sorted, *delegated_sorted]
+    seen: set[str] = set()
+    for tool in merged:
+        if tool["name"] in seen:
+            raise ValueError(f"duplicate tool name in merged list: {tool['name']!r}")
+        seen.add(tool["name"])
+    return merged

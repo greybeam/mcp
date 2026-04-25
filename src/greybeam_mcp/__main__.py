@@ -1,8 +1,11 @@
 import argparse
+import logging
 from pathlib import Path
 
 from greybeam_mcp.config import load_config
 from greybeam_mcp.logging_setup import setup_logging
+
+log = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -15,11 +18,13 @@ def main() -> None:
     cfg = load_config(args.config)
 
     # Server runtime is wired in a later commit (registry + child manager,
-    # then stdio forwarding). For now, fail loudly so partial installs are
-    # obvious.
-    raise NotImplementedError(
-        f"Server runtime not yet wired. Loaded config for account={cfg.snowflake.account}."
+    # then stdio forwarding). For now, log a structured partial-install
+    # message and raise so the failure is obvious.
+    log.warning(
+        "server_bootstrap_partial",
+        extra={"account": cfg.snowflake.account},
     )
+    raise NotImplementedError("server runtime not yet wired")
 
 
 if __name__ == "__main__":
