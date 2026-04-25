@@ -23,7 +23,13 @@ def parse_analyst_response(raw: dict[str, Any]) -> ParsedAnalyst:
     for block in blocks:
         btype = block.get("type")
         if btype == "text":
-            text_parts.append(block.get("text", ""))
+            # Coerce explicit nulls to "" so a streaming-partial block
+            # like {"type": "text", "text": null} doesn't TypeError the join.
+            text_parts.append(block.get("text") or "")
         elif btype == "sql":
-            sql = block.get("statement")
+            # Truthy-guard so a stray null statement doesn't overwrite a
+            # previously-good one (last-wins applies only to real values).
+            stmt = block.get("statement")
+            if stmt:
+                sql = stmt
     return ParsedAnalyst(text="\n".join(text_parts), sql=sql)

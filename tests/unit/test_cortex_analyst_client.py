@@ -1,3 +1,5 @@
+import base64
+
 import pytest
 import respx
 from httpx import Response
@@ -22,7 +24,9 @@ async def test_post_analyst_message_sends_to_account_url():
     assert route.called
     assert body == {"message": {"content": []}}
     sent = route.calls.last.request
-    assert sent.headers["authorization"]
+    expected = "Basic " + base64.b64encode(b"agent:pw").decode()
+    assert sent.headers["authorization"] == expected
+    assert sent.headers["content-type"] == "application/json"
 
 
 @pytest.mark.asyncio

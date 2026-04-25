@@ -80,3 +80,25 @@ def test_multiple_sql_blocks_keep_last_and_empty_input_yields_blank():
     parsed_missing = parse_analyst_response({})
     assert parsed_missing.text == ""
     assert parsed_missing.sql is None
+
+
+def test_null_text_and_null_sql_values_are_tolerated():
+    """Snowflake may emit explicit nulls for text/statement (e.g., streaming
+    partials). The parser must coerce these without raising and must not
+    let a null sql block clobber a previously-good statement.
+    """
+    raw = {
+        "message": {
+            "content": [
+                {"type": "text", "text": None},
+                {"type": "text", "text": "real text"},
+                {"type": "sql", "statement": "SELECT 1"},
+                {"type": "sql", "statement": None},
+            ]
+        }
+    }
+    parsed = parse_analyst_response(raw)
+    # Null-text coerces to "" and joins with the real one.
+    assert parsed.text == "\nreal text"
+    # Null-sql does NOT clobber the real prior statement.
+    assert parsed.sql == "SELECT 1"

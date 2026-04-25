@@ -29,6 +29,16 @@ class CortexAnalystClient:
         self._timeout = timeout
 
     def _auth_header(self) -> dict[str, str]:
+        """Build the Authorization header.
+
+        Bearer is the production path against real Snowflake, which expects
+        either an OAuth access token or a keypair-JWT in `Authorization:
+        Bearer <...>` (with `X-Snowflake-Authorization-Token-Type: KEYPAIR_JWT`
+        for the JWT case). The Basic branch below is test scaffolding only —
+        Snowflake's Cortex Analyst endpoint will reject it with 401 in
+        production. Generating a keypair JWT from the configured private key
+        is a v1.1 scope decision tracked separately.
+        """
         if self._token:
             return {"authorization": f"Bearer {self._token}"}
         if self._password:
@@ -43,8 +53,11 @@ class CortexAnalystClient:
                 json=payload,
                 headers={**self._auth_header(), "content-type": "application/json"},
             )
-        if resp.status_code >= 400:
-            raise RuntimeError(
-                f"Cortex Analyst returned {resp.status_code}: {resp.text[:200]}"
-            )
-        return resp.json()
+            # Read the body INSIDE the context manager so we don't depend on
+            # httpx's eager-buffering default; a future switch to streaming
+            # responses would break a body-read that happens after aclose().
+            if resp.status_code >= 400:
+                raise RuntimeError(
+                    f"Cortex Analyst returned {resp.status_code}: {resp.text[:200]}"
+                )
+            return resp.json()
