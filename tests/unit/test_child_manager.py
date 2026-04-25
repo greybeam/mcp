@@ -180,7 +180,88 @@ async def test_runtime_crash_exhausts_retries_then_degraded() -> None:
         await asyncio.sleep(0.01)
 
     assert mgr.state == ChildState.DEGRADED
-    assert ChildState.DEGRADED in states
+    # State callback must fire exactly RUNNING -> STOPPED -> DEGRADED with
+    # no duplicates (each transition becomes a tools/list_changed in the
+    # eventual server wiring; duplicates would cause notification storms).
+    assert states == [ChildState.RUNNING, ChildState.STOPPED, ChildState.DEGRADED]
+
+
+@pytest.mark.asyncio
+async def test_list_tools_failure_stops_started_client() -> None:
+    """If client.start() succeeds but list_tools() raises, the started
+    client must be stopped before the retry — otherwise the subprocess leaks.
+    """
+    calls = {"count": 0}
+    started_clients: list[AsyncMock] = []
+
+    def factory() -> AsyncMock:
+        calls["count"] += 1
+        c = AsyncMock()
+        c.start = AsyncMock()
+        c.stop = AsyncMock()
+        if calls["count"] == 1:
+            c.list_tools = AsyncMock(side_effect=ConnectionError("died on first request"))
+        else:
+            c.list_tools = AsyncMock(return_value=[{"name": "cortex_search"}])
+        started_clients.append(c)
+        return c
+
+    mgr = ChildManager(
+        client_factory=factory,
+        restart_policy=_policy(attempts=2),
+        cortex_search_required=True,
+    )
+    await mgr.start()
+    assert mgr.state == ChildState.RUNNING
+    assert calls["count"] == 2
+    # First (broken) client must have been stopped before the second was spawned.
+    started_clients[0].stop.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_state_callback_exception_does_not_break_recovery() -> None:
+    """on_state_change raising must not prevent teardown + recovery scheduling.
+
+    Without this guarantee, a misbehaving observer could leak a dead
+    client and silently disable recovery.
+    """
+    calls = {"count": 0}
+
+    def factory() -> AsyncMock:
+        calls["count"] += 1
+        c = AsyncMock()
+        c.list_tools = AsyncMock(return_value=[{"name": "cortex_search"}])
+        c.start = AsyncMock()
+        c.stop = AsyncMock()
+        if calls["count"] == 1:
+            c.call_tool = AsyncMock(side_effect=ConnectionError("pipe closed"))
+        else:
+            c.call_tool = AsyncMock(return_value={"isError": False, "content": []})
+        return c
+
+    async def on_state(_s: ChildState) -> None:
+        raise RuntimeError("observer is broken")
+
+    mgr = ChildManager(
+        client_factory=factory,
+        restart_policy=_policy(),
+        cortex_search_required=True,
+        on_state_change=on_state,
+    )
+    await mgr.start()
+    assert mgr.state == ChildState.RUNNING
+
+    # The original ConnectionError must surface — not the callback's RuntimeError.
+    with pytest.raises(ConnectionError):
+        await mgr.call_tool("cortex_search", {"query": "x"})
+
+    for _ in range(50):
+        if mgr.state == ChildState.RUNNING and calls["count"] >= 2:
+            break
+        await asyncio.sleep(0.01)
+
+    assert mgr.state == ChildState.RUNNING
+    assert calls["count"] == 2
 
 
 @pytest.mark.asyncio

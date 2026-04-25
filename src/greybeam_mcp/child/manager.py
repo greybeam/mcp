@@ -90,12 +90,20 @@ class ChildManager:
     async def _try_start_once(self) -> tuple[ChildMcpClient, list[dict[str, Any]]]:
         client = self._factory()
         await client.start()
-        tools = await client.list_tools()
-        if self._cortex_search_required and not any(
-            t.get("name") == "cortex_search" for t in tools
-        ):
+        # Anything from list_tools, the cortex_search check, or a CancelledError
+        # mid-attempt must not leak the started subprocess. We deliberately
+        # catch BaseException here so cancellation triggers cleanup too;
+        # client.stop() is idempotent and only re-raises BaseException
+        # itself, which we let propagate after the original error.
+        try:
+            tools = await client.list_tools()
+            if self._cortex_search_required and not any(
+                t.get("name") == "cortex_search" for t in tools
+            ):
+                raise RuntimeError("cortex_search not advertised by child")
+        except BaseException:
             await client.stop()
-            raise RuntimeError("cortex_search not advertised by child")
+            raise
         return client, tools
 
     async def _sleep_backoff(self, attempt: int) -> None:
@@ -112,6 +120,13 @@ class ChildManager:
         try:
             return await client.call_tool(name, arguments)
         except Exception:
+            # Concurrent failures: another caller has already nulled _client
+            # and is mid-teardown. Re-raise without re-firing the
+            # state-change callback or scheduling a parallel recovery.
+            # _client = None is set synchronously below before any await,
+            # so this guard reliably catches the second-loser caller.
+            if self._client is None:
+                raise
             log.warning(
                 "child call_tool(%s) failed; tearing down and scheduling recovery",
                 name,
@@ -182,6 +197,22 @@ class ChildManager:
         await self._set_state(ChildState.STOPPED)
 
     async def _set_state(self, state: ChildState) -> None:
+        """Update state and best-effort notify the observer.
+
+        The state transition itself (`self.state = state`) is the
+        authoritative event consumed by `call_tool`'s gate. The callback
+        is treated as a fire-and-forget notification: if it raises, we
+        log and continue rather than letting it derail the recovery
+        path that scheduled the transition. Mirrors the same pattern
+        used by `send_notification`.
+        """
         self.state = state
         if self._on_state_change is not None:
-            await self._on_state_change(state)
+            try:
+                await self._on_state_change(state)
+            except Exception:
+                log.warning(
+                    "on_state_change callback raised for state=%s; ignoring",
+                    state.value,
+                    exc_info=True,
+                )
