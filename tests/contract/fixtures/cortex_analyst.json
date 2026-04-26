@@ -1,14 +1,6 @@
 {
   "tool_name": "cortex_analyst",
   "input_schema_required": ["messages"],
-  "sample_analyst_response": {
-    "message": {
-      "content": [
-        { "type": "text", "text": "Generated SQL:" },
-        { "type": "sql", "statement": "SELECT 1" }
-      ]
-    }
-  },
   "sample_rows": [{ "x": 1 }],
   "expected_payload_keys_when_sql_succeeds": ["text", "sql", "results"],
   "expected_payload_keys_when_text_only": ["text"]

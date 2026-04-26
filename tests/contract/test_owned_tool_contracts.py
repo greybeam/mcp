@@ -93,6 +93,10 @@ async def test_cortex_analyst_envelope_shape_with_sql() -> None:
         AsyncMock(return_value=CortexAnalystResult(is_error=False, json_payload=payload)),
     ):
         result = await d.dispatch("cortex_analyst", {"messages": []})
+    # Pin the success envelope before decoding — without this guard a
+    # regression that flips success→error surfaces as a confusing
+    # JSONDecodeError/KeyError instead of an isError mismatch.
+    assert result["isError"] is False
     decoded = json.loads(result["content"][0]["text"])
     assert sorted(decoded.keys()) == sorted(fixture["expected_payload_keys_when_sql_succeeds"])
 
@@ -108,5 +112,9 @@ async def test_cortex_analyst_envelope_shape_text_only() -> None:
         AsyncMock(return_value=CortexAnalystResult(is_error=False, json_payload=payload)),
     ):
         result = await d.dispatch("cortex_analyst", {"messages": []})
+    # Pin the success envelope before decoding — without this guard a
+    # regression that flips success→error surfaces as a confusing
+    # JSONDecodeError/KeyError instead of an isError mismatch.
+    assert result["isError"] is False
     decoded = json.loads(result["content"][0]["text"])
     assert sorted(decoded.keys()) == sorted(fixture["expected_payload_keys_when_text_only"])

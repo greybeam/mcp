@@ -27,9 +27,29 @@ from greybeam_mcp.config import (
 
 FIX = Path(__file__).parent / "fixtures"
 
+def _missing_creds_reason() -> str | None:
+    """Return None if all required env vars are present and non-placeholder.
+
+    The upstream snowflake-labs-mcp child may eagerly validate credentials
+    on startup; running with placeholder values produces opaque hangs or
+    cryptic auth errors. Skip with a clear reason instead.
+    """
+    if os.environ.get("GREYBEAM_RUN_CHILD_CONTRACT") != "1":
+        return "set GREYBEAM_RUN_CHILD_CONTRACT=1 to run child contract tests"
+    for var in ("SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD"):
+        value = os.environ.get(var)
+        if not value or value == "test":
+            return (
+                f"{var} must be set to a real Snowflake credential when "
+                "GREYBEAM_RUN_CHILD_CONTRACT=1 (upstream child may validate "
+                "credentials on startup)"
+            )
+    return None
+
+
 pytestmark = pytest.mark.skipif(
-    os.environ.get("GREYBEAM_RUN_CHILD_CONTRACT") != "1",
-    reason="set GREYBEAM_RUN_CHILD_CONTRACT=1 to run child contract tests",
+    _missing_creds_reason() is not None,
+    reason=_missing_creds_reason() or "",
 )
 
 

@@ -72,4 +72,9 @@ async def test_row_cap_trips(configs: tuple[SnowflakeConfig, GreybeamConfig]) ->
         cancel_token=None,
     )
     assert result.is_error is True
-    assert "row_cap" in (result.error_message or "")
+    # Assert on the stable error_kind rather than substring-matching the
+    # human-readable message — copy edits to error_message would break
+    # the test without any behavior change. error_kind="cap_exceeded"
+    # covers both row and byte cap; here we know it's the row cap because
+    # the byte cap is unchanged at 10MB and 1000 generator rows fit in it.
+    assert result.error_kind == "cap_exceeded"
