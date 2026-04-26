@@ -1,0 +1,8 @@
+{
+  "tools": [
+    {
+      "name": "cortex_search",
+      "input_schema_required_fields": ["query"]
+    }
+  ]
+}

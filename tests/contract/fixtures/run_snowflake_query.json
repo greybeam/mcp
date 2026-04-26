@@ -1,0 +1,21 @@
+{
+  "tool_name": "run_snowflake_query",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "statement": {
+        "type": "string",
+        "description": "SQL statement to execute via the Greybeam proxy."
+      }
+    },
+    "required": ["statement"],
+    "additionalProperties": false
+  },
+  "sample_input": { "statement": "SELECT 1 AS x" },
+  "sample_rows": [{ "x": 1 }],
+  "expected_success_envelope": {
+    "isError": false,
+    "content_type": "text",
+    "json_payload_type": "list-of-dicts"
+  }
+}
