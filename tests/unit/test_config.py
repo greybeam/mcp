@@ -1,10 +1,9 @@
-import os
 from pathlib import Path
 
 import pytest
 import yaml
 
-from greybeam_mcp.config import Config, RestartPolicy, load_config
+from greybeam_mcp.config import load_config
 
 
 def write_yaml(tmp_path: Path, data: dict) -> Path:

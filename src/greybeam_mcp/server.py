@@ -23,7 +23,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
@@ -210,7 +210,9 @@ async def run_server(cfg: Config, child_command: str, child_args: list[str]) -> 
         start = time.monotonic()
         try:
             result = await dispatcher.dispatch(name, arguments, request_id=request_id)
-            outcome = "tool_error" if result.get("isError") else "ok"
+            outcome: Literal["ok", "tool_error"] = (
+                "tool_error" if result.get("isError") else "ok"
+            )
             log.info(
                 "tool_call",
                 extra=tool_call_log(
