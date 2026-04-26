@@ -10,35 +10,28 @@ Out of scope for v1: Cortex Agent, semantic views, and the upstream `object_mana
 
 ## Quick start
 
-Greybeam MCP is not yet published to PyPI — install from a local clone with
-[`uv`](https://docs.astral.sh/uv/):
+Install and run the setup wizard with [`uv`](https://docs.astral.sh/uv/):
 
-    git clone https://github.com/greybeam/mcp.git greybeam-mcp
-    cd greybeam-mcp
-    uv sync
-    uv run greybeam-mcp init
+    uvx greybeam-mcp init
 
 The `init` wizard prompts for account, user, proxy host, and auth method;
 writes a config file at `~/.config/greybeam-mcp.yaml` (mode 0600); and prints
-the exact registration command for Claude Code and Claude Desktop — keyed to
-this clone's path so the printed snippets are copy-pasteable. Recommended path
-for new users.
+the exact registration command for Claude Code and Claude Desktop.
 
-> Once the package ships on PyPI, the same wizard will print the simpler
-> `uvx greybeam-mcp …` form. The `init` flow already detects which environment
-> it's running in.
+For a packaged install, the printed command uses this form:
+
+    claude mcp add greybeam -- uvx greybeam-mcp --config ~/.config/greybeam-mcp.yaml
 
 ## Manual install and run
 
 If you'd rather author the YAML by hand, copy `examples/greybeam.yaml` to a
 location of your choice, edit it, `chmod 600` it, then:
 
+    uvx greybeam-mcp --config /absolute/path/to/greybeam.yaml
+
+From a source checkout, use `uv run` instead:
+
     uv run greybeam-mcp --config /absolute/path/to/greybeam.yaml
-
-You can run the server from anywhere by pointing `uv` at the clone:
-
-    uv --directory /absolute/path/to/greybeam-mcp run \
-        greybeam-mcp --config /absolute/path/to/greybeam.yaml
 
 ## Configuration
 
@@ -66,20 +59,30 @@ The Cortex Analyst REST endpoint expects `Authorization: Bearer <oauth_or_jwt>`.
 
 ## Client integration
 
-`uv run greybeam-mcp init` prints registration snippets pre-filled with this
-clone's absolute path. The general shapes:
+`uvx greybeam-mcp init` prints registration snippets pre-filled with your config
+path. The general shapes:
 
 **Claude Code (CLI):**
 
-    claude mcp add greybeam -- uv --directory /absolute/path/to/greybeam-mcp \
-        run greybeam-mcp --config /absolute/path/to/greybeam.yaml
+    claude mcp add greybeam -- uvx greybeam-mcp --config /absolute/path/to/greybeam.yaml
 
 Start a new `claude` session to pick it up. Verify with `claude mcp list`.
 
-**Claude Desktop:** see `examples/claude_desktop_config.json`. Paste into
-`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or
-the equivalent on your platform, fill in both absolute paths, then restart the
-app.
+**Claude Desktop:** paste the JSON printed by `greybeam-mcp init` into
+`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or the
+equivalent on your platform, then restart the app. The installed-package shape
+is:
+
+```json
+{
+  "mcpServers": {
+    "greybeam": {
+      "command": "uvx",
+      "args": ["greybeam-mcp", "--config", "/absolute/path/to/greybeam.yaml"]
+    }
+  }
+}
+```
 
 After a successful install, ask the agent something like *"run select 1 on
 snowflake"* — it should pick the `run_snowflake_query` tool automatically.
@@ -108,6 +111,14 @@ Client-driven cancellation (`notifications/cancelled`) is **not** wired in v1. T
     uv sync --extra dev
     uv run pytest
 
+To run the server from a local clone instead of the PyPI package:
+
+    uv run greybeam-mcp init
+
+The wizard detects the source checkout and prints registration commands using
+`uv --directory /absolute/path/to/greybeam-mcp run greybeam-mcp ...`, so local
+development can point clients at unpublished changes.
+
 The default suite runs unit + always-on contract tests (no network, no DB). Two test layers are gated behind environment variables:
 
 Contract tests against the real upstream child (requires real Snowflake credentials — placeholders are not enough because the upstream child may validate at startup):
@@ -126,3 +137,22 @@ Integration tests against a real Greybeam dev endpoint:
 The upstream Snowflake MCP package is pinned at `snowflake-labs-mcp==1.4.1` (import name `mcp_server_snowflake`). Bumping that pin should re-run the child contract snapshot test and re-approve `tests/contract/fixtures/child_tools_list.json` if the surface drifted.
 
 Design doc: `docs/superpowers/specs/2026-04-24-greybeam-mcp-design.md`.
+
+## Release
+
+Build and verify locally before publishing:
+
+    uv build --no-sources
+    uv run pytest
+    uv run ruff check src/ tests/
+
+Preferred publish path:
+
+1. Create a GitHub environment named `pypi`.
+2. Configure a pending PyPI Trusted Publisher for project `greybeam-mcp`, this
+   repository, the `pypi` environment, and `.github/workflows/publish.yml`.
+3. Create a GitHub release for a tag whose version matches `pyproject.toml`.
+
+Manual fallback, if Trusted Publishing is not configured yet:
+
+    uv publish --token pypi-...
