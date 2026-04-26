@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import getpass as _getpass
 import json
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -41,6 +42,36 @@ def _prompt_required(label: str, input_fn: Callable[[str], str]) -> str:
         print("  required.")
 
 
+def _prompt_existing_file(
+    label: str, input_fn: Callable[[str], str], out: TextIO
+) -> str:
+    """Prompt for a file path, re-prompting until it resolves to a real file."""
+    while True:
+        raw = _prompt_required(label, input_fn)
+        resolved = Path(raw).expanduser().resolve()
+        if resolved.is_file():
+            return str(resolved)
+        print(f"  not a file: {resolved}", file=out)
+
+
+def _prompt_passphrase_with_confirmation(
+    getpass_fn: Callable[[str], str], out: TextIO
+) -> str:
+    """Prompt for a passphrase twice and re-prompt on mismatch.
+
+    Empty input (unencrypted key) is accepted on the first prompt without
+    asking for confirmation — re-typing nothing adds no value.
+    """
+    while True:
+        first = getpass_fn("  Passphrase (blank if unencrypted): ")
+        if not first:
+            return ""
+        second = getpass_fn("  Confirm passphrase: ")
+        if first == second:
+            return first
+        print("  passphrases did not match — try again.", file=out)
+
+
 def _prompt_auth(
     input_fn: Callable[[str], str],
     getpass_fn: Callable[[str], str],
@@ -58,9 +89,8 @@ def _prompt_auth(
         print("  enter 1, 2, or 3.", file=out)
 
     if choice == "1":
-        path_str = _prompt_required("  Path to private key (.p8)", input_fn)
-        path = str(Path(path_str).expanduser().resolve())
-        passphrase = getpass_fn("  Passphrase (blank if unencrypted): ")
+        path = _prompt_existing_file("  Path to private key (.p8)", input_fn, out)
+        passphrase = _prompt_passphrase_with_confirmation(getpass_fn, out)
         result: dict[str, Any] = {"private_key_file": path}
         if passphrase:
             result["private_key_passphrase"] = passphrase
@@ -212,8 +242,13 @@ def run_wizard(
         account=account, user=user, proxy_host=proxy_host, auth=auth
     )
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(yaml.safe_dump(payload, sort_keys=False))
-    target.chmod(0o600)
+    # Create with 0o600 atomically — no chmod-after-write window where the
+    # credentials file might exist with broader perms under permissive umasks.
+    fd = os.open(
+        target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
+    )
+    with os.fdopen(fd, "w") as f:
+        yaml.safe_dump(payload, f, sort_keys=False)
 
     _print_followups(target, out, _detect_source_repo())
     return target

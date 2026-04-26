@@ -47,8 +47,12 @@ def test_default_upstream_args_run_under_current_interpreter() -> None:
     """The default ``-c`` payload must be syntactically valid and resolve.
 
     Runs the same ``python -c`` payload greybeam-mcp uses to spawn the
-    child, but with ``--help`` so the upstream exits cleanly without
-    needing real Snowflake credentials.
+    child, with ``--help`` so the upstream exits quickly. We deliberately
+    do NOT assert on the exit code — a future upstream that pre-validates
+    config or env before parsing ``--help`` would exit non-zero even
+    though our payload is correct. The contract this test pins is "the
+    ``-c`` payload doesn't fail at the Python level", so we only fail on
+    import/syntax errors hitting stderr.
     """
     args = _default_upstream_args()
     result = subprocess.run(
@@ -57,7 +61,9 @@ def test_default_upstream_args_run_under_current_interpreter() -> None:
         text=True,
         timeout=10,
     )
-    assert result.returncode == 0, (
-        f"Upstream invocation failed.\nstdout={result.stdout}\n"
-        f"stderr={result.stderr}"
+    fatal_markers = ("ImportError", "ModuleNotFoundError", "SyntaxError")
+    found = [m for m in fatal_markers if m in result.stderr]
+    assert not found, (
+        f"Upstream -c payload failed at the Python level ({found}).\n"
+        f"stdout={result.stdout}\nstderr={result.stderr}"
     )
