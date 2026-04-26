@@ -1,10 +1,47 @@
+# Greybeam MCP configuration template.
+#
+# This file is the single source of truth — it holds connection details
+# AND credentials. `chmod 600` it after editing.
+#
+# Run `uvx greybeam-mcp init` for an interactive wizard that generates
+# this file with the right values prefilled.
+
 snowflake:
-  account: abc-xyz123
+  # Your Snowflake account locator, e.g. ABC12345-XY67890.
+  account: <your-snowflake-account>
+
+  # Snowflake user.
+  user: <your-snowflake-user>
+
+  # Pick exactly one auth method.
+
+  # 1. Key-pair auth via file (RECOMMENDED — Snowflake's preferred method).
+  private_key_file: /absolute/path/to/rsa_key.p8
+  # private_key_passphrase: <only-if-key-is-encrypted>
+
+  # 2. Key-pair auth via inline PEM (for environments without a writable disk).
+  # private_key: |
+  #   -----BEGIN PRIVATE KEY-----
+  #   ...
+  #   -----END PRIVATE KEY-----
+
+  # 3. SSO via browser. Requires a configured SAML2 integration on the account.
+  # authenticator: externalbrowser
+
+  # 4. Password (DEPRECATED by Snowflake — avoid for new setups).
+  # password: <your-password>
+
+  # Cortex Search services exposed via the cortex_search tool.
+  # Leave [] to skip Cortex Search.
   search_services:
     - service_name: docs_search
       description: "Product documentation search"
       database_name: DOCS
       schema_name: PUBLIC
+
+  # v1 locks these to empty / false. Greybeam owns cortex_analyst and
+  # run_snowflake_query; cortex_agent and the *_manager families are
+  # disabled so a misconfigured deploy can't expose them.
   analyst_services: []
   agent_services: []
   other_services:
@@ -13,13 +50,26 @@ snowflake:
     semantic_manager: false
 
 greybeam:
-  proxy_host: greybeam.example.com
+  # Greybeam proxy hostname. Typically <account>.<env>.compute.greybeam.ai.
+  proxy_host: <your-account>.demo.compute.greybeam.ai
+
+  # Per-query result limits. Exceeding either cancels the query.
   row_cap: 10000
   byte_cap: 10000000
+
+  # Snowflake-side query timeout, seconds.
   query_timeout: 300
+
+  # Restart policy for the upstream Snowflake MCP child process.
   child_restart_policy:
     max_attempts: 3
     backoff_seconds: [1, 4, 16]
     jitter: true
+
+  # If true, the server fails to start unless the upstream child
+  # advertises the cortex_search tool. Set false if you don't have
+  # Cortex Search configured (server runs in degraded mode).
   cortex_search_required: true
+
+  # Log every SQL statement at INFO. Off by default (PII / secrets risk).
   log_sql: false

@@ -87,8 +87,8 @@ async def test_child_tools_list_matches_snapshot(tmp_path: Path) -> None:
     client = ChildMcpClient(
         command=sys.executable,
         args=[
-            "-m",
-            "mcp_server_snowflake",
+            "-c",
+            "from mcp_server_snowflake import main; main()",
             "--service-config-file",
             str(child_yaml),
         ],

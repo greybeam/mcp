@@ -1,0 +1,28 @@
+review_agent = "claude-code"
+review_guidelines = """
+This is a Python MCP (Model Context Protocol) server for Greybeam that routes SQL queries through the Greybeam Snowflake-protocol proxy and delegates cortex_search to an upstream Snowflake MCP subprocess.
+
+Review priorities:
+- Correctness of async/sync boundaries (asyncio.to_thread for blocking DB work, cursor.cancel() on dispatcher thread).
+- Correct MCP protocol usage: CallToolResult envelope preservation (never drop isError), structured content, error formatting.
+- Child process lifecycle: bounded restart with jitter, state transitions, recovery path ordering (STOPPED → teardown → schedule recover).
+- Cancellation scope v1: scaffolding only. Cancel is NOT wired to production triggers; bounds come from Snowflake cursor.execute(timeout=...) and explicit cursor.cancel() on cap exceedance.
+- Background list_changed notifications use session_holder closure, not server.request_context.
+
+Out of scope for v1 (do NOT flag as missing):
+- Wiring CancelToken to MCP notifications/cancelled handler.
+- asyncio watchdog timeouts that call dispatcher.cancel().
+- Connection pooling, caching, or retries beyond what's specified.
+- Additional delegated tools beyond cortex_search.
+- Prometheus metrics, OpenTelemetry tracing.
+
+Style:
+- Favor small, single-purpose modules (200-400 lines typical).
+- Immutability where reasonable; pydantic v2 models for config.
+- Pinned upstream MCP subprocess version.
+
+For python files, delegate to the python-reviewer agent.
+For specs, plans, and anything architecture and design related, delegate to the architect agent.
+Always run the security-reviewer subagent on any code touching authentication,
+credentials, or external data boundaries.
+"""

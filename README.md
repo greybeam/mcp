@@ -8,7 +8,17 @@ A single MCP server that lets agents query data through the Greybeam routing lay
 
 Out of scope for v1: Cortex Agent, semantic views, and the upstream `object_manager` / `query_manager` / `semantic_manager` tool families. These are locked off in the child config so a misconfigured deployment can't accidentally expose them.
 
-## Install and run
+## Quick start
+
+    uvx greybeam-mcp init
+
+Interactive wizard — prompts for account, user, proxy host, and auth method;
+writes a `~/.config/greybeam-mcp.yaml` (mode 0600); prints the exact registration
+command for Claude Code and Claude Desktop. Recommended path for new users.
+
+## Manual install and run
+
+If you'd rather author the YAML by hand, see `examples/greybeam.yaml`, then:
 
     uvx greybeam-mcp --config /path/to/greybeam.yaml
 
@@ -19,20 +29,41 @@ For a permanent environment:
 
 ## Configuration
 
-See `examples/greybeam.yaml`. Secrets come from environment variables; everything else is YAML.
+The YAML is the single source of truth — it holds account, proxy host, **and**
+auth credentials. Pick one auth method (in order of recommendation):
 
-Required env vars (one of the auth methods is required):
+- `private_key_file` (path to a PEM key, plus optional `private_key_passphrase`) — **recommended**, since Snowflake is deprecating password auth
+- `private_key` (inline PEM contents) — for environments without a writable disk
+- `authenticator: externalbrowser` for SSO (requires a SAML2 integration on the account)
+- `password` — deprecated by Snowflake, avoid for new setups
 
-- `SNOWFLAKE_USER`
-- `SNOWFLAKE_PASSWORD` (or `SNOWFLAKE_PRIVATE_KEY` / `SNOWFLAKE_AUTHENTICATOR`)
+`chmod 600` the file since it contains credentials.
+
+### Environment variable fallback
+
+Every field above can also come from an environment variable
+(`SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY_FILE`, `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE`,
+`SNOWFLAKE_PRIVATE_KEY`, `SNOWFLAKE_AUTHENTICATOR`, `SNOWFLAKE_PASSWORD`). YAML
+takes precedence; envs fill in unset fields. Useful in container/k8s deployments
+where secrets are mounted as env vars. See `examples/.env.example`.
 
 ### Cortex Analyst auth (v1 limitation)
 
 The Cortex Analyst REST endpoint expects `Authorization: Bearer <oauth_or_jwt>`. The v1 client supports Bearer (`token`) directly; the password / Basic-auth branch is test scaffolding and will return 401 against real Snowflake. If you need Cortex Analyst in production today, configure an OAuth access token via the `token` field in code; broader keypair-JWT support is tracked for v1.1.
 
-## Claude Desktop integration
+## Client integration
 
-See `examples/claude_desktop_config.json`.
+`uvx greybeam-mcp init` prints the right snippet for both clients. The shapes are:
+
+**Claude Code (CLI):**
+
+    claude mcp add greybeam -- uvx greybeam-mcp --config /path/to/greybeam.yaml
+
+Start a new `claude` session to pick it up. Verify with `claude mcp list`.
+
+**Claude Desktop:** see `examples/claude_desktop_config.json`. Paste into
+`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or
+the equivalent on your platform, then restart the app.
 
 ## Statement-type policy
 

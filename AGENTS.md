@@ -91,15 +91,6 @@ These were vetted across the v1 implementation and review cycle. Treat as non-ne
 5. **TDD per task.** Write the failing test first, confirm it fails, then implement. The plan tasks are structured this way for a reason.
 6. **One logical commit per plan task group.** Don't bundle unrelated changes; don't split a single task across multiple commits.
 
-## Contributing
-
-1. Read the design doc (`docs/superpowers/specs/2026-04-24-greybeam-mcp-design.md`) and the relevant plan task before touching code.
-2. Use TDD. Write the failing test, run it (confirm RED), implement, run again (GREEN), then refactor.
-3. Run `uv run pytest -q` and `uv run ruff check src/ tests/` before committing.
-4. Commit messages: `<type>(<scope>): <one-line description>` followed by a body explaining the **why**. Types: `feat`, `fix`, `test`, `docs`, `chore`, `refactor`, `perf`, `ci`.
-5. After committing, run `roborev wait <sha>` and `roborev show <sha>`. Triage every finding — typically 1–3 of ~5 are legitimate. Fix in a follow-up commit; never silently bypass.
-6. Do **not** push to remote unless explicitly asked. Do **not** run `roborev fix` / `roborev refine` / `--fix` flags — they bypass user review.
-
 ## Cancellation Roadmap (v1.1)
 
 The scaffolding to enable client-driven cancellation is already here:

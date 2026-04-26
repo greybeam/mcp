@@ -40,6 +40,8 @@ class SnowflakeConfig(BaseModel):
     user: str
     password: SecretStr | None = None
     private_key: SecretStr | None = None
+    private_key_file: Path | None = None
+    private_key_passphrase: SecretStr | None = None
     authenticator: str | None = None
     search_services: list[CortexSearchService] = Field(default_factory=list)
     analyst_services: list[Any] = Field(default_factory=list)
@@ -56,11 +58,17 @@ class SnowflakeConfig(BaseModel):
 
     @model_validator(mode="after")
     def require_auth_method(self) -> "SnowflakeConfig":
-        if not (self.password or self.private_key or self.authenticator):
+        if not (
+            self.password
+            or self.private_key
+            or self.private_key_file
+            or self.authenticator
+        ):
             raise ValueError(
                 "snowflake auth required: set one of password, private_key, "
-                "or authenticator (via YAML or SNOWFLAKE_PASSWORD / "
-                "SNOWFLAKE_PRIVATE_KEY / SNOWFLAKE_AUTHENTICATOR env)"
+                "private_key_file, or authenticator (via YAML or SNOWFLAKE_PASSWORD / "
+                "SNOWFLAKE_PRIVATE_KEY / SNOWFLAKE_PRIVATE_KEY_FILE / "
+                "SNOWFLAKE_AUTHENTICATOR env)"
             )
         return self
 
@@ -111,6 +119,10 @@ def _inject_env(snowflake_data: dict[str, Any]) -> dict[str, Any]:
         snowflake_data.setdefault("password", pw)
     if pk := os.environ.get("SNOWFLAKE_PRIVATE_KEY"):
         snowflake_data.setdefault("private_key", pk)
+    if pkf := os.environ.get("SNOWFLAKE_PRIVATE_KEY_FILE"):
+        snowflake_data.setdefault("private_key_file", pkf)
+    if pkp := os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE"):
+        snowflake_data.setdefault("private_key_passphrase", pkp)
     if auth := os.environ.get("SNOWFLAKE_AUTHENTICATOR"):
         snowflake_data.setdefault("authenticator", auth)
     return snowflake_data

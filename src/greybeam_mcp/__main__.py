@@ -2,9 +2,11 @@
 
 Spawns the upstream Snowflake MCP child via stdio. The default
 ``--upstream-command`` is the current Python interpreter and the
-default upstream module is ``mcp_server_snowflake`` (the import name
-of the ``snowflake-labs-mcp`` package). Both are overridable for
-integration testing or alternative deployments.
+default ``--upstream-arg`` invocation imports and calls
+``mcp_server_snowflake.main`` (the console-script entry point of the
+``snowflake-labs-mcp`` package, which does not expose a ``__main__``
+module). Both are overridable for integration testing or alternative
+deployments.
 """
 from __future__ import annotations
 
@@ -22,6 +24,15 @@ from greybeam_mcp.server import run_server
 
 
 def main() -> None:
+    # `greybeam-mcp init` is a sibling subcommand to the default serve flow.
+    # Detect it before argparse runs so the existing --config-required parser
+    # stays backward compatible for the serve path.
+    if len(sys.argv) >= 2 and sys.argv[1] == "init":
+        from greybeam_mcp.init import run_wizard
+
+        run_wizard()
+        return
+
     parser = argparse.ArgumentParser(prog="greybeam-mcp")
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--log-level", default="INFO")
@@ -36,7 +47,8 @@ def main() -> None:
         default=None,
         help=(
             "Repeatable args for the upstream command. Defaults to "
-            "['-m', 'mcp_server_snowflake'] when not specified."
+            "['-c', 'from mcp_server_snowflake import main; main()'] "
+            "when not specified."
         ),
     )
     args = parser.parse_args()
@@ -54,7 +66,13 @@ def main() -> None:
         os.chmod(child_config_path, 0o600)
         write_child_config(cfg.snowflake, child_config_path)
 
-        upstream_args_base = args.upstream_arg or ["-m", "mcp_server_snowflake"]
+        # snowflake-labs-mcp ships a console-script entry point but no
+        # ``__main__``, so ``-m mcp_server_snowflake`` fails. Invoke the
+        # entry-point function directly via ``-c`` for portability.
+        upstream_args_base = args.upstream_arg or [
+            "-c",
+            "from mcp_server_snowflake import main; main()",
+        ]
         upstream_args = [
             *upstream_args_base,
             "--service-config-file",

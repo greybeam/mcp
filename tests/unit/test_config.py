@@ -205,3 +205,62 @@ def test_missing_all_auth_methods_raises(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="snowflake auth required"):
         load_config(path)
+
+
+def _minimal_yaml_payload() -> dict:
+    return {
+        "snowflake": {
+            "account": "abc-xyz",
+            "search_services": [],
+            "analyst_services": [],
+            "agent_services": [],
+            "other_services": {
+                "query_manager": False,
+                "object_manager": False,
+                "semantic_manager": False,
+            },
+        },
+        "greybeam": {
+            "proxy_host": "greybeam.example.com",
+            "row_cap": 10000,
+            "byte_cap": 10_000_000,
+            "query_timeout": 300,
+            "child_restart_policy": {
+                "max_attempts": 3,
+                "backoff_seconds": [1, 4, 16],
+                "jitter": True,
+            },
+            "cortex_search_required": True,
+            "log_sql": False,
+        },
+    }
+
+
+def test_private_key_file_env_satisfies_auth(tmp_path, monkeypatch):
+    """SNOWFLAKE_PRIVATE_KEY_FILE alone satisfies require_auth_method."""
+    monkeypatch.setenv("SNOWFLAKE_USER", "agent")
+    monkeypatch.delenv("SNOWFLAKE_PASSWORD", raising=False)
+    monkeypatch.delenv("SNOWFLAKE_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("SNOWFLAKE_AUTHENTICATOR", raising=False)
+    key_path = tmp_path / "key.p8"
+    key_path.write_text("dummy")
+    monkeypatch.setenv("SNOWFLAKE_PRIVATE_KEY_FILE", str(key_path))
+    path = write_yaml(tmp_path, _minimal_yaml_payload())
+
+    cfg = load_config(path)
+    assert cfg.snowflake.private_key_file == key_path
+
+
+def test_private_key_passphrase_env_loads(tmp_path, monkeypatch):
+    monkeypatch.setenv("SNOWFLAKE_USER", "agent")
+    monkeypatch.delenv("SNOWFLAKE_PASSWORD", raising=False)
+    key_path = tmp_path / "key.p8"
+    key_path.write_text("dummy")
+    monkeypatch.setenv("SNOWFLAKE_PRIVATE_KEY_FILE", str(key_path))
+    monkeypatch.setenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE", "s3cret")
+    path = write_yaml(tmp_path, _minimal_yaml_payload())
+
+    cfg = load_config(path)
+    assert cfg.snowflake.private_key_passphrase is not None
+    assert cfg.snowflake.private_key_passphrase.get_secret_value() == "s3cret"
+
