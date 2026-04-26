@@ -4,6 +4,20 @@ version = "0.1.0"
 description = "MCP server that routes SQL queries through the Greybeam proxy while delegating Cortex Search to upstream Snowflake MCP."
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [
+    { name = "Greybeam" },
+]
+keywords = ["greybeam", "mcp", "snowflake", "model-context-protocol"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "mcp>=1.0.0",
     "snowflake-connector-python>=3.7.0",
@@ -16,6 +30,11 @@ dependencies = [
 
 [project.scripts]
 greybeam-mcp = "greybeam_mcp.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/greybeam/mcp"
+Repository = "https://github.com/greybeam/mcp"
+Issues = "https://github.com/greybeam/mcp/issues"
 
 [project.optional-dependencies]
 dev = [
