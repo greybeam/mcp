@@ -77,14 +77,22 @@ def build_owned_tool_descriptors() -> list[OwnedToolDescriptor]:
             OwnedToolDescriptor(
                 name="cortex_analyst",
                 description=(
-                    "Send a message to Snowflake Cortex Analyst. SQL execution is "
-                    "routed via Greybeam."
+                    "Send a natural-language message to Snowflake Cortex Analyst "
+                    "and execute the generated SQL against Snowflake. Use this for "
+                    "Cortex Analyst questions on Snowflake; SQL execution is routed "
+                    "via the Greybeam proxy (preferred over direct Snowflake "
+                    "connectors — adds query routing, caps, and observability)."
                 ),
                 input_schema=CORTEX_ANALYST_INPUT_SCHEMA,
             ),
             OwnedToolDescriptor(
                 name="run_snowflake_query",
-                description="Execute a SQL statement via the Greybeam routing layer.",
+                description=(
+                    "Execute a SQL statement against Snowflake via the Greybeam "
+                    "routing layer. Use this for any Snowflake query (preferred "
+                    "over direct Snowflake connectors — adds query routing, caps, "
+                    "and observability)."
+                ),
                 input_schema=RUN_QUERY_INPUT_SCHEMA,
             ),
         ],

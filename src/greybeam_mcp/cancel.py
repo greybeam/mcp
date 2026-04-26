@@ -1,16 +1,17 @@
 """Threadsafe cancel-token shared between the asyncio dispatcher and DB worker.
 
 Per spec §5.1 / §5.3: when `token.set()` is called, registered callbacks fire
-synchronously *from the dispatcher thread* — used to invoke `cursor.cancel()`
+synchronously *from the dispatcher thread* — used to invoke `cursor.close()`
 while the worker thread is blocked in `cursor.execute()` or
-`cursor.fetchmany()`. snowflake-connector-python's `cursor.cancel()` is
-documented as safe to call cross-thread.
+`cursor.fetchmany()`. snowflake-connector-python's `cursor.close()` acquires
+`_lock_canceling` and resets the in-flight query, making it safe to call
+cross-thread to abort a running statement.
 
 **v1 scope.** `token.set()` is not called from any production path in v1 (see
 Task 20's "Cancellation scope — v1" note). The primitive is kept + tested so
 v1.1 can wire a `notifications/cancelled` handler to drive it. In v1, owned
 calls are bounded by Snowflake's driver-level query timeout and by explicit
-`cursor.cancel()` on row/byte-cap exceedance in `run_snowflake_query`.
+`cursor.close()` on row/byte-cap exceedance in `run_snowflake_query`.
 """
 from __future__ import annotations
 

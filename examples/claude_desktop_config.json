@@ -1,8 +1,15 @@
 {
   "mcpServers": {
     "greybeam": {
-      "command": "uvx",
-      "args": ["greybeam-mcp", "--config", "/absolute/path/to/greybeam.yaml"]
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/absolute/path/to/greybeam-mcp",
+        "run",
+        "greybeam-mcp",
+        "--config",
+        "/absolute/path/to/greybeam.yaml"
+      ]
     }
   }
 }

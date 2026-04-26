@@ -3,8 +3,10 @@
 Per spec §5.3 / §7.2:
   - blocking DB work runs on a worker thread via asyncio.to_thread (Task 9)
   - `cursor.execute(timeout=gb.query_timeout)` bounds wall-clock per call;
-    `cursor.cancel()` is called explicitly on row_cap / byte_cap exceedance
-  - a `CancelToken` is registered with `cursor.cancel` so a future
+    `cursor.close()` is called explicitly on row_cap / byte_cap exceedance
+    to abort the in-flight query (snowflake-connector's cursor has no public
+    `cancel()`; `close()` acquires `_lock_canceling` and resets the query)
+  - a `CancelToken` is registered with `cursor.close` so a future
     `notifications/cancelled`-driven `token.set()` would interrupt the worker.
     v1 does NOT wire that trigger (see Task 20's "Cancellation scope — v1");
     the registration is scaffolding so v1.1 is a pure wiring change.
@@ -94,19 +96,19 @@ def _execute_sync(
     Runs on a worker thread (caller wraps in asyncio.to_thread).
     Memory is bounded to roughly row_cap plus one batch.
 
-    Cancellation: `cursor.cancel` is registered with the token so the
+    Cancellation: `cursor.close` is registered with the token so the
     dispatcher (event loop) thread can interrupt a blocking `cursor.execute`
     or `cursor.fetchmany` by calling `token.set()`. The next batch boundary
     then sees the flag and exits cleanly with `Cancelled`.
     """
     with conn.cursor(DictCursor) as cursor:
-        cancel_token.register_cancel(cursor.cancel)
+        cancel_token.register_cancel(cursor.close)
         cursor.execute(statement, timeout=timeout)
         results: list[dict[str, Any]] = []
         total_bytes = 0
         while True:
             if cancel_token.is_set():
-                # cursor.cancel was already fired from set() in the dispatcher thread.
+                # cursor.close was already fired from set() in the dispatcher thread.
                 raise Cancelled()
             batch = cursor.fetchmany(batch_size)
             if not batch:
@@ -114,10 +116,10 @@ def _execute_sync(
             results.extend(batch)
             total_bytes += _est_bytes(batch)
             if len(results) > row_cap:
-                cursor.cancel()
+                cursor.close()
                 raise CapExceededError("row_cap", row_cap, len(results))
             if total_bytes > byte_cap:
-                cursor.cancel()
+                cursor.close()
                 raise CapExceededError("byte_cap", byte_cap, total_bytes)
 
 

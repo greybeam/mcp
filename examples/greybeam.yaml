@@ -3,8 +3,10 @@
 # This file is the single source of truth — it holds connection details
 # AND credentials. `chmod 600` it after editing.
 #
-# Run `uvx greybeam-mcp init` for an interactive wizard that generates
-# this file with the right values prefilled.
+# Run `uv run greybeam-mcp init` from a clone of this repo for an
+# interactive wizard that generates this file with the right values
+# prefilled. (Once published to PyPI, the simpler `uvx greybeam-mcp init`
+# form will also work.)
 
 snowflake:
   # Your Snowflake account locator, e.g. ABC12345-XY67890.

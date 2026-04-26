@@ -48,7 +48,7 @@ def test_row_cap_exceeded_raises():
             cancel_token=CancelToken(),
             batch_size=1000,
         )
-    cursor.cancel.assert_called_once()
+    cursor.close.assert_called_once()
     assert "row_cap" in str(exc.value)
 
 
@@ -65,7 +65,7 @@ def test_byte_cap_exceeded_raises():
             cancel_token=CancelToken(),
             batch_size=1000,
         )
-    cursor.cancel.assert_called_once()
+    cursor.close.assert_called_once()
     assert "byte_cap" in str(exc.value)
 
 
@@ -95,4 +95,4 @@ def test_cancel_token_observed_between_batches():
             cancel_token=token,
             batch_size=1,
         )
-    cursor.cancel.assert_called_once()
+    cursor.close.assert_called_once()
