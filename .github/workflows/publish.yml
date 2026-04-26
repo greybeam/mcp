@@ -8,9 +8,36 @@ permissions:
   contents: read
 
 jobs:
+  verify:
+    name: Verify package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Run lint
+        run: uv run ruff check src/ tests/
+
   publish:
     name: Build and publish
     runs-on: ubuntu-latest
+    needs: verify
+    if: ${{ github.event.release.prerelease == false }}
     environment:
       name: pypi
     permissions:
@@ -19,18 +46,24 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.11"
 
       - name: Build distributions
         run: uv build --no-sources
+
+      - name: List distributions
+        run: ls -la dist/
+
+      - name: Check distributions
+        run: uv run --with twine --no-project twine check dist/*
 
       - name: Publish distributions
         run: uv publish
